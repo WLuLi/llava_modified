@@ -204,6 +204,16 @@ class LlamaMLP(nn.Module):
 
         self.act_fn = ACT2FN[config.hidden_act]
 
+        with torch.no_grad():
+            self.vision_gate_proj.weight.copy_(self.gate_proj.weight)
+            self.vision_up_proj.weight.copy_(self.up_proj.weight)
+            self.vision_down_proj.weight.copy_(self.down_proj.weight)
+        
+        for param in [self.gate_proj, self.up_proj, self.down_proj]:
+            param.weight.requires_grad_(False)
+            if param.bias is not None:
+                param.bias.requires_grad_(False)
+
     def mlp_process(self, x, gate_proj, up_proj, down_proj):
         if self.pretraining_tp > 1:
             slice = self.intermediate_size // self.pretraining_tp
