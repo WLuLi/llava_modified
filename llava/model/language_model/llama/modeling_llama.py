@@ -232,7 +232,7 @@ class LlamaMLP(nn.Module):
 
         return down_proj
 
-    def forward(self, x, img_masks):
+    def forward(self, x, img_masks=None):
         # Separate image and text features
         vision_hidden_states = x * img_masks.unsqueeze(-1)
         language_hidden_states = x * (~img_masks.unsqueeze(-1))
@@ -329,11 +329,6 @@ class LlamaAttention(nn.Module):
         output_attentions: bool = False,
         use_cache: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        # print("img_masks: ", img_masks)
-        # print("img_masks shape: ", img_masks.shape)
-        # import time
-        # time.sleep(5)
-
         bsz, q_len, _ = hidden_states.size()
 
         language_hidden_states = hidden_states * (~img_masks.unsqueeze(-1))
@@ -457,16 +452,12 @@ class LlamaAttention(nn.Module):
         vision_attn_output = vision_attn_output.transpose(1, 2).contiguous()
         vision_attn_output = vision_attn_output.reshape(bsz, q_len, self.hidden_size)
 
+        attn_output = attn_output * (~img_masks.unsqueeze(-1)) + vision_attn_output * img_masks.unsqueeze(-1)
+
         if self.pretraining_tp > 1:
             attn_output = attn_output.split(self.hidden_size // self.pretraining_tp, dim=2)
             o_proj_slices = self.o_proj.weight.split(self.hidden_size // self.pretraining_tp, dim=1)
             attn_output = sum([F.linear(attn_output[i], o_proj_slices[i]) for i in range(self.pretraining_tp)])
-
-            vision_attn_output = vision_attn_output.split(self.hidden_size // self.pretraining_tp, dim=2)
-            vision_o_proj_slices = self.o_proj.weight.split(self.hidden_size // self.pretraining_tp, dim=1)
-            vision_attn_output = sum([F.linear(vision_attn_output[i], vision_o_proj_slices[i]) for i in range(self.pretraining_tp)])
-
-            attn_output = attn_output + vision_attn_output
         else:
             attn_output = self.o_proj(attn_output)
 
@@ -481,7 +472,7 @@ class LlamaDecoderLayer(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = LlamaAttention(config=config)
-        self.mlp = LlamaMLP(config)
+        self.mlp = LlamaMLP(config=config)
         self.input_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
