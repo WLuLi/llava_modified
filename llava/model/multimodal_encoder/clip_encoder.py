@@ -24,6 +24,8 @@ class CLIPVisionTower(nn.Module):
         else:
             self.cfg_only = CLIPVisionConfig.from_pretrained(self.vision_tower_name)
             self.clip_hidden_size = self.cfg_only.hidden_size
+            self.dino_v2_cfg_only = Dinov2Config.from_pretrained("facebook/dinov2-base")
+            self.dino_v2_hidden_size = self.dino_v2_cfg_only.hidden_size
 
         self.layer_norms_clip = nn.ModuleList([nn.LayerNorm(self.clip_hidden_size) for _ in range(24)])
         self.linears_clip = nn.ModuleList([nn.Linear(self.clip_hidden_size, self.clip_hidden_size) for _ in range(24)])
