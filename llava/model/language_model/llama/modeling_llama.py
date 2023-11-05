@@ -234,8 +234,12 @@ class LlamaMLP(nn.Module):
 
     def forward(self, x, img_masks=None):
         # Separate image and text features
-        vision_hidden_states = x * img_masks.unsqueeze(-1)
-        language_hidden_states = x * (~img_masks.unsqueeze(-1))
+        if img_masks is None:
+            vision_hidden_states = x * 0
+            language_hidden_states = x
+        else:
+            vision_hidden_states = x * img_masks.unsqueeze(-1)
+            language_hidden_states = x * (~img_masks.unsqueeze(-1))
 
         # Process image and text features
         processed_vision_hidden_states = self.mlp_process(vision_hidden_states, self.vision_gate_proj, self.vision_up_proj, self.vision_down_proj)
@@ -331,8 +335,12 @@ class LlamaAttention(nn.Module):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
 
-        language_hidden_states = hidden_states * (~img_masks.unsqueeze(-1))
-        vision_hidden_states = hidden_states * img_masks.unsqueeze(-1)
+        if img_masks is None:
+            language_hidden_states = hidden_states
+            vision_hidden_states = hidden_states * 0
+        else:
+            language_hidden_states = hidden_states * (~img_masks.unsqueeze(-1))
+            vision_hidden_states = hidden_states * img_masks.unsqueeze(-1)
 
         if self.pretraining_tp > 1:
             key_value_slicing = (self.num_key_value_heads * self.head_dim) // self.pretraining_tp
@@ -413,12 +421,6 @@ class LlamaAttention(nn.Module):
                 f" {attn_weights.size()}"
             )
 
-        if vision_attn_weights.size() != (bsz, self.num_heads, q_len, kv_seq_len):
-            raise ValueError(
-                f"Attention weights should be of size {(bsz, self.num_heads, q_len, kv_seq_len)}, but is"
-                f" {vision_attn_weights.size()}"
-            )
-
         # ---- need check
         if attention_mask is not None:
             if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
@@ -452,7 +454,8 @@ class LlamaAttention(nn.Module):
         vision_attn_output = vision_attn_output.transpose(1, 2).contiguous()
         vision_attn_output = vision_attn_output.reshape(bsz, q_len, self.hidden_size)
 
-        attn_output = attn_output * (~img_masks.unsqueeze(-1)) + vision_attn_output * img_masks.unsqueeze(-1)
+        if img_masks is not None:
+            attn_output = attn_output * (~img_masks.unsqueeze(-1)) + vision_attn_output * img_masks.unsqueeze(-1)
 
         if self.pretraining_tp > 1:
             attn_output = attn_output.split(self.hidden_size // self.pretraining_tp, dim=2)
