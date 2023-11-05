@@ -48,6 +48,7 @@ class CLIPVisionTower(nn.Module):
 
         self.dino_v2_image_processor = AutoImageProcessor.from_pretrained("facebook/dinov2-base")
         self.dino_v2 = Dinov2Model.from_pretrained("facebook/dinov2-base")
+        self.dino_v2.requires_grad_(False)
         self.dino_v2_hidden_size = self.dino_v2.config.hidden_size
 
         self.is_loaded = True
@@ -88,7 +89,8 @@ class CLIPVisionTower(nn.Module):
                 clip_image_forward_out = self.vision_tower(image.to(device=self.device, dtype=self.dtype).unsqueeze(0), output_hidden_states=True)
                 clip_image_feature = self.compute_clip_features(clip_image_forward_out)
                 
-                image = self.dino_v2_image_processor(image)
+                print("image shape: ", image.shape)
+                # image = self.dino_v2_image_processor(image)
                 dino_v2_image_forward_out = self.dino_v2(image.to(device=self.device, dtype=self.dtype).unsqueeze(0), output_hidden_states=True)
                 dino_v2_image_feature = self.compute_dinov2_features(dino_v2_image_forward_out)
                 

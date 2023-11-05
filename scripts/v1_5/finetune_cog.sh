@@ -5,7 +5,7 @@ deepspeed llava/train/train_mem.py \
     --deepspeed ./scripts/zero3.json \
     --model_name_or_path lmsys/vicuna-13b-v1.5 \
     --version v1 \
-    --data_path ./playground/data/LLaVA/Finetune/llava_v1_5_mix665k.json \
+    --data_path ./playground/data/LLaVA/Finetune/llava_finetune_small.json \
     --image_folder ./playground/data/LLaVA/Finetune/ \
     --vision_tower openai/clip-vit-large-patch14-336 \
     --pretrain_mm_mlp_adapter /mnt/disk0/wangqijie/checkpoints/llava-v1.5-13b-pretrain/mm_projector.bin \
