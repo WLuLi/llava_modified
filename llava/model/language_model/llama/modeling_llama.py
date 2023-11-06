@@ -382,15 +382,15 @@ class LlamaAttention(nn.Module):
             vision_key_states = self.vision_k_proj(vision_hidden_states)
             vision_value_states = self.vision_v_proj(vision_hidden_states)
 
+        # combine vision and language
+        query_states = query_states + vision_query_states
+        key_states = key_states + vision_key_states
+        value_states = value_states + vision_value_states
+
         query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        vision_query_states = vision_query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        vision_key_states = vision_key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        vision_value_states = vision_value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-
-        # ----need check
         kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
             kv_seq_len += past_key_value[0].shape[-2]
@@ -403,17 +403,12 @@ class LlamaAttention(nn.Module):
             value_states = torch.cat([past_key_value[1], value_states], dim=2)
 
         past_key_value = (key_states, value_states) if use_cache else None
-        # ----need check
 
         # repeat k/v heads if n_kv_heads < n_heads
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-        vision_key_states = repeat_kv(vision_key_states, self.num_key_value_groups)
-        vision_value_states = repeat_kv(vision_value_states, self.num_key_value_groups)
-
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
-        vision_attn_weights = torch.matmul(query_states, vision_key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
 
         if attn_weights.size() != (bsz, self.num_heads, q_len, kv_seq_len):
             raise ValueError(
@@ -421,7 +416,6 @@ class LlamaAttention(nn.Module):
                 f" {attn_weights.size()}"
             )
 
-        # ---- need check
         if attention_mask is not None:
             if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
                 raise ValueError(
@@ -433,29 +427,14 @@ class LlamaAttention(nn.Module):
         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
         attn_output = torch.matmul(attn_weights, value_states)
 
-        vision_attn_weights = nn.functional.softmax(vision_attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-        vision_attn_output = torch.matmul(vision_attn_weights, vision_value_states)
-
         if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
             raise ValueError(
                 f"`attn_output` should be of size {(bsz, self.num_heads, q_len, self.head_dim)}, but is"
                 f" {attn_output.size()}"
             )
-        
-        if vision_attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, q_len, self.head_dim)}, but is"
-                f" {vision_attn_output.size()}"
-            )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
-
-        vision_attn_output = vision_attn_output.transpose(1, 2).contiguous()
-        vision_attn_output = vision_attn_output.reshape(bsz, q_len, self.hidden_size)
-
-        if img_masks is not None:
-            attn_output = attn_output * (~img_masks.unsqueeze(-1)) + vision_attn_output * img_masks.unsqueeze(-1)
 
         if self.pretraining_tp > 1:
             attn_output = attn_output.split(self.hidden_size // self.pretraining_tp, dim=2)
