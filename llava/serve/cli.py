@@ -29,7 +29,7 @@ def main(args):
     disable_torch_init()
 
     model_name = get_model_name_from_path(args.model_path)
-    tokenizer, model, image_processor, context_len = load_pretrained_model(args.model_path, args.model_base, model_name, args.load_8bit, args.load_4bit, device=args.device)
+    tokenizer, model, image_processor, image_processor_2, context_len = load_pretrained_model(args.model_path, args.model_base, model_name, args.load_8bit, args.load_4bit, device=args.device)
 
     if 'llama-2' in model_name.lower():
         conv_mode = "llava_llama_2"
@@ -54,10 +54,15 @@ def main(args):
     image = load_image(args.image_file)
     # Similar operation in model_worker.py
     image_tensor = process_images([image], image_processor, args)
+    image_tensor_2 = process_images([image], image_processor_2, args)
     if type(image_tensor) is list:
         image_tensor = [image.to(model.device, dtype=torch.float16) for image in image_tensor]
     else:
         image_tensor = image_tensor.to(model.device, dtype=torch.float16)
+    if type(image_tensor_2) is list:
+        image_tensor_2 = [image.to(model.device, dtype=torch.float16) for image in image_tensor_2]
+    else:
+        image_tensor_2 = image_tensor_2.to(model.device, dtype=torch.float16)
 
     while True:
         try:
@@ -94,6 +99,7 @@ def main(args):
             output_ids = model.generate(
                 input_ids,
                 images=image_tensor,
+                images_2=image_tensor_2,
                 do_sample=True,
                 temperature=args.temperature,
                 max_new_tokens=args.max_new_tokens,

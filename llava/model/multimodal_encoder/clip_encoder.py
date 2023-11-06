@@ -46,7 +46,7 @@ class CLIPVisionTower(nn.Module):
         self.vision_tower.requires_grad_(False)
         self.clip_hidden_size = self.vision_tower.config.hidden_size
 
-        self.dino_v2_image_processor = AutoImageProcessor.from_pretrained("facebook/dinov2-base")
+        self.image_processor_2 = AutoImageProcessor.from_pretrained("facebook/dinov2-base")
         self.dino_v2 = Dinov2Model.from_pretrained("facebook/dinov2-base")
         self.dino_v2.requires_grad_(False)
         self.dino_v2_hidden_size = self.dino_v2.config.hidden_size
@@ -82,27 +82,26 @@ class CLIPVisionTower(nn.Module):
         return sum(features)
 
     @torch.no_grad()
-    def forward(self, images):
+    def forward(self, images, images_2):
         if type(images) is list:
             image_features = []
-            for image in images:
-                clip_image_forward_out = self.vision_tower(image.to(device=self.device, dtype=self.dtype).unsqueeze(0), output_hidden_states=True)
+            for i in range(len(images)):
+                clip_image_forward_out = self.vision_tower(images[i].to(device=self.device, dtype=self.dtype).unsqueeze(0), output_hidden_states=True)
                 clip_image_feature = self.compute_clip_features(clip_image_forward_out)
-                
-                print("image shape: ", image.shape)
-                # image = self.dino_v2_image_processor(image)
-                dino_v2_image_forward_out = self.dino_v2(image.to(device=self.device, dtype=self.dtype).unsqueeze(0), output_hidden_states=True)
-                dino_v2_image_feature = self.compute_dinov2_features(dino_v2_image_forward_out)
-                
-                image_features.append(self.mlp(dino_v2_image_feature) + clip_image_feature)
+
+                dino_image_forward_out = self.dino_v2(images_2[i].to(device=self.device, dtype=self.dtype).unsqueeze(0), output_hidden_states=True)
+                dino_image_feature = self.compute_dinov2_features(dino_image_forward_out)
+
+                image_feature = self.mlp(dino_image_feature) + clip_image_feature
+                image_features.append(image_feature)
         else:
             clip_image_forward_out = self.vision_tower(images.to(device=self.device, dtype=self.dtype), output_hidden_states=True)
             clip_image_feature = self.compute_clip_features(clip_image_forward_out)
 
-            dino_v2_image_forward_out = self.dino_v2(images.to(device=self.device, dtype=self.dtype), output_hidden_states=True)
-            dino_v2_image_feature = self.compute_dinov2_features(dino_v2_image_forward_out)
+            dino_image_forward_out = self.dino_v2(images_2.to(device=self.device, dtype=self.dtype), output_hidden_states=True)
+            dino_image_feature = self.compute_dinov2_features(dino_image_forward_out)
 
-            image_features = self.mlp(dino_v2_image_feature) + clip_image_feature
+            image_features = self.mlp(dino_image_feature) + clip_image_feature
 
         return image_features
 

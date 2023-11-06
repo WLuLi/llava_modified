@@ -28,7 +28,7 @@ def eval_model(args):
     disable_torch_init()
 
     model_name = get_model_name_from_path(args.model_path)
-    tokenizer, model, image_processor, context_len = load_pretrained_model(args.model_path, args.model_base, model_name)
+    tokenizer, model, image_processor, image_processor_2,  context_len = load_pretrained_model(args.model_path, args.model_base, model_name)
 
     qs = args.query
     if model.config.mm_use_im_start_end:
@@ -57,6 +57,7 @@ def eval_model(args):
 
     image = load_image(args.image_file)
     image_tensor = image_processor.preprocess(image, return_tensors='pt')['pixel_values'].half().cuda()
+    image_tensor_2 = image_processor_2.preprocess(image, return_tensors='pt')['pixel_values'].half().cuda()
 
     input_ids = tokenizer_image_token(prompt, tokenizer, IMAGE_TOKEN_INDEX, return_tensors='pt').unsqueeze(0).cuda()
 
@@ -68,6 +69,7 @@ def eval_model(args):
         output_ids = model.generate(
             input_ids,
             images=image_tensor,
+            images_2=image_tensor_2,
             do_sample=True,
             temperature=0.2,
             max_new_tokens=1024,

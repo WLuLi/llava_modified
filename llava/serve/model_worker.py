@@ -62,7 +62,7 @@ class ModelWorker:
 
         self.device = device
         logger.info(f"Loading the model {self.model_name} on worker {worker_id} ...")
-        self.tokenizer, self.model, self.image_processor, self.context_len = load_pretrained_model(
+        self.tokenizer, self.model, self.image_processor, self.image_processor_2, self.context_len = load_pretrained_model(
             model_path, model_base, self.model_name, load_8bit, load_4bit, device=self.device)
         self.is_multimodal = 'llava' in self.model_name.lower()
 
@@ -121,7 +121,7 @@ class ModelWorker:
 
     @torch.inference_mode()
     def generate_stream(self, params):
-        tokenizer, model, image_processor = self.tokenizer, self.model, self.image_processor
+        tokenizer, model, image_processor, image_processor_2 = self.tokenizer, self.model, self.image_processor, self.image_processor_2
 
         prompt = params["prompt"]
         ori_prompt = prompt
@@ -134,11 +134,16 @@ class ModelWorker:
 
                 images = [load_image_from_base64(image) for image in images]
                 images = process_images(images, image_processor, model.config)
+                images_2 = process_images(images, image_processor_2, model.config)
 
                 if type(images) is list:
                     images = [image.to(self.model.device, dtype=torch.float16) for image in images]
                 else:
                     images = images.to(self.model.device, dtype=torch.float16)
+                if type(images_2) is list:
+                    images_2 = [image.to(self.model.device, dtype=torch.float16) for image in images_2]
+                else:
+                    images_2 = images_2.to(self.model.device, dtype=torch.float16)
 
                 replace_token = DEFAULT_IMAGE_TOKEN
                 if getattr(self.model.config, 'mm_use_im_start_end', False):
@@ -148,9 +153,11 @@ class ModelWorker:
                 num_image_tokens = prompt.count(replace_token) * model.get_vision_tower().num_patches
             else:
                 images = None
-            image_args = {"images": images}
+                images_2 = None
+            image_args = {"images": images, "images_2": images_2}
         else:
             images = None
+            images_2 = None
             image_args = {}
 
         temperature = float(params.get("temperature", 1.0))

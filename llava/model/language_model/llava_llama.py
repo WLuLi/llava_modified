@@ -65,6 +65,7 @@ class LlavaLlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         images: Optional[torch.FloatTensor] = None,
+        images_2: Optional[torch.FloatTensor] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
 
@@ -82,7 +83,8 @@ class LlavaLlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
                 attention_mask,
                 past_key_values,
                 labels,
-                images
+                images,
+                images_2
             )
 
         return super().forward(
@@ -99,12 +101,15 @@ class LlavaLlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
         )
 
     def prepare_inputs_for_generation(self, input_ids, past_key_values=None, inputs_embeds=None, **kwargs):
+        images_2 = kwargs.pop("images_2", None)
         images = kwargs.pop("images", None)
         _inputs = super().prepare_inputs_for_generation(
             input_ids, past_key_values=past_key_values, inputs_embeds=inputs_embeds, **kwargs
         )
         if images is not None:
             _inputs['images'] = images
+        if images_2 is not None:
+            _inputs['images_2'] = images_2
         return _inputs
 
 AutoConfig.register("llava", LlavaConfig)

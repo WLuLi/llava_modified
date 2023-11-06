@@ -685,6 +685,7 @@ class LazySupervisedDataset(Dataset):
             image_file = self.list_data_dict[i]['image']
             image_folder = self.data_args.image_folder
             processor = self.data_args.image_processor
+            processor_2 = self.data_args.image_processor_2
             image = Image.open(os.path.join(image_folder, image_file)).convert('RGB')
             if self.data_args.image_aspect_ratio == 'pad':
                 def expand2square(pil_img, background_color):
@@ -699,10 +700,14 @@ class LazySupervisedDataset(Dataset):
                         result = Image.new(pil_img.mode, (height, height), background_color)
                         result.paste(pil_img, ((height - width) // 2, 0))
                         return result
+                image_2 = expand2square(image, tuple(int(x*255) for x in processor_2.image_mean))
+                image_2 = processor_2.preprocess(image_2, return_tensors='pt')['pixel_values'][0]
+
                 image = expand2square(image, tuple(int(x*255) for x in processor.image_mean))
                 image = processor.preprocess(image, return_tensors='pt')['pixel_values'][0]
             else:
                 image = processor.preprocess(image, return_tensors='pt')['pixel_values'][0]
+                image_2 = processor_2.preprocess(image, return_tensors='pt')['pixel_values'][0]
             sources = preprocess_multimodal(
                 copy.deepcopy([e["conversations"] for e in sources]),
                 self.data_args)
@@ -719,10 +724,13 @@ class LazySupervisedDataset(Dataset):
         # image exist in the data
         if 'image' in self.list_data_dict[i]:
             data_dict['image'] = image
+            data_dict['image_2'] = image_2
         elif self.data_args.is_multimodal:
             # image does not exist in the data, but the model is multimodal
             crop_size = self.data_args.image_processor.crop_size
+            crop_size_2 = self.data_args.image_processor_2.crop_size
             data_dict['image'] = torch.zeros(3, crop_size['height'], crop_size['width'])
+            data_dict['image_2'] = torch.zeros(3, crop_size_2['height'], crop_size_2['width'])
         return data_dict
 
 
@@ -899,6 +907,7 @@ def train():
         vision_tower.to(dtype=torch.bfloat16 if training_args.bf16 else torch.float16, device=training_args.device)
 
         data_args.image_processor = vision_tower.image_processor
+        data_args.image_processor_2 = vision_tower.image_processor_2
         data_args.is_multimodal = True
 
         model.config.image_aspect_ratio = data_args.image_aspect_ratio
